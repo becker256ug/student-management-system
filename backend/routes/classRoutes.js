@@ -1,26 +1,26 @@
 const express = require("express");
 
 const {
-  createStudent,
-  getStudents,
-} = require("../controllers/studentController");
+  createClass,
+  getClasses,
+} = require("../controllers/classController");
 
 const authenticateToken = require("../middleware/authMiddleware");
 const authorizeRoles = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
-// All student routes require authentication
+// All class routes require authentication
 router.use(authenticateToken);
 
-// Only admin and registrar can register students
+// Only admin and registrar can create classes
 router.post(
   "/",
   authorizeRoles("admin", "registrar"),
-  createStudent
+  createClass
 );
 
-// Authenticated users can view students for now
-router.get("/", getStudents);
+// Authenticated users can view classes
+router.get("/", getClasses);
 
 module.exports = router;

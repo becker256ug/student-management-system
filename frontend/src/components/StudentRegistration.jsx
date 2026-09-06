@@ -1,17 +1,18 @@
 import { useState } from "react";
 
 const initialForm = {
+  name: "",
+  email: "",
+  password: "",
   student_number: "",
   first_name: "",
   last_name: "",
   gender: "",
   date_of_birth: "",
-  email: "",
   phone: "",
   address: "",
   guardian_name: "",
   guardian_phone: "",
-  class_name: "",
 };
 
 function StudentRegistration() {
@@ -35,14 +36,40 @@ function StudentRegistration() {
     setMessage("");
     setError("");
 
+    // Validate required fields
     if (
-      !formData.student_number ||
-      !formData.first_name ||
-      !formData.last_name ||
+      !formData.name.trim() ||
+      !formData.email.trim() ||
+      !formData.password ||
+      !formData.student_number.trim() ||
+      !formData.first_name.trim() ||
+      !formData.last_name.trim() ||
       !formData.gender ||
       !formData.date_of_birth
     ) {
-      setError("Please fill in all required fields.");
+      setError(
+        "Name, email, password, student number, first name, last name, gender, and date of birth are required."
+      );
+      return;
+    }
+
+    // Prevent future date of birth
+    const today = new Date().toISOString().split("T")[0];
+
+    if (formData.date_of_birth > today) {
+      setError("Date of birth cannot be in the future.");
+      return;
+    }
+
+    // Get logged-in administrator's JWT
+    const token =
+      localStorage.getItem("token") ||
+      localStorage.getItem("authToken") ||
+      localStorage.getItem("accessToken") ||
+      localStorage.getItem("jwtToken");
+
+    if (!token) {
+      setError("Your login session has expired. Please log in again.");
       return;
     }
 
@@ -55,6 +82,7 @@ function StudentRegistration() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(formData),
         }
@@ -63,7 +91,9 @@ function StudentRegistration() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Failed to register student.");
+        throw new Error(
+          data.message || "Failed to register student."
+        );
       }
 
       setMessage(
@@ -82,17 +112,87 @@ function StudentRegistration() {
     <div className="registration-container">
       <div className="registration-card">
         <div className="registration-header">
-          <h1>Student Registration</h1>
-          <p>Enter the student's information below.</p>
+          <h1>Register Student</h1>
+          <p>Create a new student account and student record.</p>
         </div>
 
-        {message && <div className="success-message">{message}</div>}
+        {message && (
+          <div className="success-message">
+            {message}
+          </div>
+        )}
 
-        {error && <div className="error-message">{error}</div>}
+        {error && (
+          <div className="error-message">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
+          {/* ACCOUNT INFORMATION */}
+          <section>
+            <h2>Student Account</h2>
+            <p>
+              These details will be used to create the student's
+              login account.
+            </p>
+
+            <div className="form-grid">
+              <div className="form-group">
+                <label htmlFor="name">
+                  Account Name <span>*</span>
+                </label>
+
+                <input
+                  id="name"
+                  name="name"
+                  type="text"
+                  value={formData.name}
+                  onChange={handleChange}
+                  placeholder="e.g. John Doe"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="email">
+                  Email Address <span>*</span>
+                </label>
+
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  placeholder="student@example.com"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="password">
+                  Password <span>*</span>
+                </label>
+
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  placeholder="Create student password"
+                  minLength="6"
+                  required
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* STUDENT INFORMATION */}
           <section>
             <h2>Student Information</h2>
+            <p>Basic information about the student.</p>
 
             <div className="form-grid">
               <div className="form-group">
@@ -173,25 +273,15 @@ function StudentRegistration() {
                   type="date"
                   value={formData.date_of_birth}
                   onChange={handleChange}
+                  max={new Date().toISOString().split("T")[0]}
                   required
                 />
               </div>
 
               <div className="form-group">
-                <label htmlFor="email">Email</label>
-
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="student@example.com"
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="phone">Phone Number</label>
+                <label htmlFor="phone">
+                  Phone Number
+                </label>
 
                 <input
                   id="phone"
@@ -204,7 +294,9 @@ function StudentRegistration() {
               </div>
 
               <div className="form-group full-width">
-                <label htmlFor="address">Address</label>
+                <label htmlFor="address">
+                  Address
+                </label>
 
                 <input
                   id="address"
@@ -218,12 +310,15 @@ function StudentRegistration() {
             </div>
           </section>
 
+          {/* GUARDIAN INFORMATION */}
           <section>
             <h2>Parent / Guardian Information</h2>
 
             <div className="form-grid">
               <div className="form-group">
-                <label htmlFor="guardian_name">Guardian Name</label>
+                <label htmlFor="guardian_name">
+                  Guardian Name
+                </label>
 
                 <input
                   id="guardian_name"
@@ -236,7 +331,9 @@ function StudentRegistration() {
               </div>
 
               <div className="form-group">
-                <label htmlFor="guardian_phone">Guardian Phone</label>
+                <label htmlFor="guardian_phone">
+                  Guardian Phone
+                </label>
 
                 <input
                   id="guardian_phone"
@@ -245,25 +342,6 @@ function StudentRegistration() {
                   value={formData.guardian_phone}
                   onChange={handleChange}
                   placeholder="0700000000"
-                />
-              </div>
-            </div>
-          </section>
-
-          <section>
-            <h2>Academic Information</h2>
-
-            <div className="form-grid">
-              <div className="form-group">
-                <label htmlFor="class_name">Class / Program</label>
-
-                <input
-                  id="class_name"
-                  name="class_name"
-                  type="text"
-                  value={formData.class_name}
-                  onChange={handleChange}
-                  placeholder="e.g. Senior One"
                 />
               </div>
             </div>
