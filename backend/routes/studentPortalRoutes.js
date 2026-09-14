@@ -1,118 +1,83 @@
 const express = require("express");
 
 const {
-  createResult,
-  getResults,
-  getTeacherStudents,
-  updateResult,
-  getStudentResults,
-} = require("../controllers/resultController");
+  getMyProfile,
+  getMyAttendance,
+  getMyTimetable,
+  getMyFees,
+} = require("../controllers/studentPortalController");
 
 const authenticateToken = require("../middleware/authMiddleware");
 const authorizeRoles = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
+/*
+|--------------------------------------------------------------------------
+| AUTHENTICATION
+|--------------------------------------------------------------------------
+*/
+
 router.use(authenticateToken);
 
+/*
+|--------------------------------------------------------------------------
+| STUDENT-ONLY ACCESS
+|--------------------------------------------------------------------------
+*/
+
+router.use(authorizeRoles("student"));
 
 /*
 |--------------------------------------------------------------------------
-| STUDENT RESULTS
+| MY PROFILE
 |--------------------------------------------------------------------------
-|
-| GET /api/results/student
-|
-| Students can only receive their own results.
-|
+| GET /api/student-portal/profile
 |--------------------------------------------------------------------------
 */
 
 router.get(
-  "/student",
-  authorizeRoles("student"),
-  getStudentResults
+  "/profile",
+  getMyProfile
 );
-
 
 /*
 |--------------------------------------------------------------------------
-| TEACHER STUDENTS
+| MY ATTENDANCE
 |--------------------------------------------------------------------------
-|
-| GET /api/results/teacher/students?assignment_id=1
-|
+| GET /api/student-portal/attendance
 |--------------------------------------------------------------------------
 */
 
 router.get(
-  "/teacher/students",
-  authorizeRoles("teacher"),
-  getTeacherStudents
+  "/attendance",
+  getMyAttendance
 );
-
 
 /*
 |--------------------------------------------------------------------------
-| GET ALL RESULTS
+| MY TIMETABLE
 |--------------------------------------------------------------------------
-|
-| Admin / Registrar / Teacher
-|
+| GET /api/student-portal/timetable
 |--------------------------------------------------------------------------
 */
 
 router.get(
-  "/",
-  authorizeRoles(
-    "admin",
-    "registrar",
-    "teacher"
-  ),
-  getResults
+  "/timetable",
+  getMyTimetable
 );
-
 
 /*
 |--------------------------------------------------------------------------
-| CREATE RESULT
+| MY FEES
 |--------------------------------------------------------------------------
-|
-| Admin / Registrar / Teacher
-|
+| GET /api/student-portal/fees
 |--------------------------------------------------------------------------
 */
 
-router.post(
-  "/",
-  authorizeRoles(
-    "admin",
-    "registrar",
-    "teacher"
-  ),
-  createResult
+router.get(
+  "/fees",
+  getMyFees
 );
-
-
-/*
-|--------------------------------------------------------------------------
-| UPDATE RESULT
-|--------------------------------------------------------------------------
-|
-| Admin / Registrar / Teacher
-|
-|--------------------------------------------------------------------------
-*/
-
-router.put(
-  "/:id",
-  authorizeRoles(
-    "admin",
-    "registrar",
-    "teacher"
-  ),
-  updateResult
-);
-
 
 module.exports = router;

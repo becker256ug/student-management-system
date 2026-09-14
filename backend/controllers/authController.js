@@ -1,7 +1,10 @@
-
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const db = require("../config/db");
+
+const {
+  createActivityLog,
+} = require("./activityLogController");
 
 const login = async (req, res) => {
   const { email, password } = req.body;
@@ -63,6 +66,27 @@ const login = async (req, res) => {
       }
     );
 
+    /*
+     * Record administrator login activity.
+     *
+     * Only users with the admin role are logged.
+     * Teacher and student logins are not added to
+     * the administrator activity log.
+     */
+    if (user.role === "admin") {
+      await createActivityLog({
+        userId: user.id,
+        action: "LOGIN",
+        module: "Authentication",
+        description: "Administrator logged in",
+        recordId: user.id,
+        ipAddress:
+          req.headers["x-forwarded-for"] ||
+          req.socket.remoteAddress ||
+          null,
+      });
+    }
+
     return res.status(200).json({
       message: "Login successful",
       token,
@@ -74,7 +98,10 @@ const login = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Login database/authentication error:", error);
+    console.error(
+      "Login database/authentication error:",
+      error
+    );
 
     return res.status(500).json({
       message: "Server error",

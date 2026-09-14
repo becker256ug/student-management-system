@@ -1,77 +1,122 @@
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
+
 import Login from "./components/Login";
+import TeacherDashboard from "./components/TeacherDashboard";
+import TeacherManagement from "./components/TeacherManagement";
+import TeacherAssignmentManagement from "./components/TeacherAssignmentManagement";
+import EnrollmentManagement from "./components/EnrollmentManagement";
+import StudentDashboard from "./components/StudentDashboard";
+import ClassManagement from "./components/ClassManagement";
+import SubjectManagement from "./components/SubjectManagement";
+import AcademicYearManagement from "./components/AcademicYearManagement";
+import ActivityLogManagement from "./components/ActivityLogManagement";
 
 const API_URL = "http://localhost:5000/api/students";
 
 const emptyForm = {
-  name: "",
-  email: "",
-  password: "",
   student_number: "",
   first_name: "",
   last_name: "",
   gender: "",
   date_of_birth: "",
+  email: "",
   phone: "",
   address: "",
   guardian_name: "",
   guardian_phone: "",
+  password: "",
 };
 
 function App() {
-  // =========================================================
-  // AUTHENTICATION
-  // =========================================================
-
   const [auth, setAuth] = useState(() => {
     try {
       const savedAuth = localStorage.getItem("studentHubAuth");
 
-      return savedAuth ? JSON.parse(savedAuth) : null;
-    } catch {
+      if (!savedAuth) {
+        return null;
+      }
+
+      return JSON.parse(savedAuth);
+    } catch (error) {
+      console.error("Failed to load saved authentication:", error);
       localStorage.removeItem("studentHubAuth");
       return null;
     }
   });
 
+  const [students, setStudents] = useState([]);
+  const [teachersCount, setTeachersCount] = useState(0);
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
   const [activePage, setActivePage] = useState("dashboard");
 
-  // =========================================================
-  // STUDENTS
-  // =========================================================
-
-  const [students, setStudents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  // =========================================================
-  // REGISTRATION FORM
-  // =========================================================
 
   const [form, setForm] = useState(emptyForm);
-  const [submitting, setSubmitting] = useState(false);
+
   const [success, setSuccess] = useState("");
   const [formError, setFormError] = useState("");
 
-  // =========================================================
-  // FETCH STUDENTS AFTER LOGIN
-  // =========================================================
+  const [showStudentForm, setShowStudentForm] = useState(false);
+
+  const [editingStudentId, setEditingStudentId] = useState(null);
+
+  /*
+  |--------------------------------------------------------------------------
+  | SAVE AUTHENTICATION
+  |--------------------------------------------------------------------------
+  */
 
   useEffect(() => {
-    if (auth?.token) {
-      fetchStudents();
+    if (auth) {
+      localStorage.setItem(
+        "studentHubAuth",
+        JSON.stringify(auth)
+      );
     } else {
-      setStudents([]);
-      setLoading(false);
+      localStorage.removeItem("studentHubAuth");
     }
   }, [auth]);
 
-  // =========================================================
-  // FETCH STUDENTS
-  // =========================================================
+  /*
+  |--------------------------------------------------------------------------
+  | LOAD ADMIN DATA
+  |--------------------------------------------------------------------------
+  */
+
+  useEffect(() => {
+    if (!auth?.token) {
+      setStudents([]);
+      setTeachersCount(0);
+      setLoading(false);
+      return;
+    }
+
+    /*
+     * Teachers and students use their own portals.
+     */
+    if (
+      auth.user?.role === "teacher" ||
+      auth.user?.role === "student"
+    ) {
+      setStudents([]);
+      setTeachersCount(0);
+      setLoading(false);
+      return;
+    }
+
+    fetchStudents();
+    fetchTeachersCount();
+  }, [auth]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | FETCH STUDENTS
+  |--------------------------------------------------------------------------
+  */
 
   const fetchStudents = async () => {
     if (!auth?.token) {
@@ -83,1659 +128,2977 @@ function App() {
       setError("");
 
       const response = await fetch(API_URL, {
-        method: "GET",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${auth.token}`,
         },
       });
 
-      if (response.status === 401 || response.status === 403) {
-        handleLogout();
-
-        throw new Error(
-          "Your session has expired. Please log in again."
-        );
-      }
-
-      const data = await response.json().catch(() => ({}));
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.message ||
-            data.error ||
-            "Unable to load students."
+          data.message || "Failed to fetch students."
         );
       }
 
-      const studentList = Array.isArray(data)
-        ? data
-        : data.students || data.data || [];
-
-      setStudents(studentList);
+      setStudents(
+        Array.isArray(data) ? data : []
+      );
     } catch (err) {
-      console.error("Fetch students error:", err);
+      console.error(
+        "Failed to fetch students:",
+        err
+      );
 
       setError(
-        err.message || "Unable to load students."
+        err.message || "Failed to load students."
       );
     } finally {
       setLoading(false);
     }
   };
 
-  // =========================================================
-  // STATISTICS
-  // =========================================================
+  /*
+  |--------------------------------------------------------------------------
+  | FETCH TEACHER COUNT
+  |--------------------------------------------------------------------------
+  */
 
-  const totalStudents = students.length;
-
-  const maleStudents = students.filter(
-    (student) =>
-      student.gender?.toLowerCase() === "male"
-  ).length;
-
-  const femaleStudents = students.filter(
-    (student) =>
-      student.gender?.toLowerCase() === "female"
-  ).length;
-
-  const recentStudents = students.slice(0, 5);
-
-  // =========================================================
-  // SEARCH
-  // =========================================================
-
-  const filteredStudents = useMemo(() => {
-    const searchTerm = search.toLowerCase().trim();
-
-    if (!searchTerm) {
-      return students;
-    }
-
-    return students.filter((student) => {
-      return (
-        student.student_number
-          ?.toLowerCase()
-          .includes(searchTerm) ||
-        student.first_name
-          ?.toLowerCase()
-          .includes(searchTerm) ||
-        student.last_name
-          ?.toLowerCase()
-          .includes(searchTerm) ||
-        student.email
-          ?.toLowerCase()
-          .includes(searchTerm) ||
-        student.phone
-          ?.toLowerCase()
-          .includes(searchTerm)
-      );
-    });
-  }, [students, search]);
-
-  // =========================================================
-  // FORM INPUT
-  // =========================================================
-
-  const handleInputChange = (event) => {
-    const { name, value } = event.target;
-
-    setForm((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
-  };
-
-  // =========================================================
-  // REGISTER STUDENT
-  // =========================================================
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-
-    setSuccess("");
-    setFormError("");
-
-    if (!auth?.token) {
-      setFormError(
-        "You must be logged in to register a student."
-      );
-
-      return;
-    }
-
-    // -------------------------------------------------------
-    // CLIENT-SIDE VALIDATION
-    // -------------------------------------------------------
-
-    const requiredFields = [
-      "name",
-      "email",
-      "password",
-      "student_number",
-      "first_name",
-      "last_name",
-      "gender",
-      "date_of_birth",
-    ];
-
-    const missingField = requiredFields.some(
-      (field) => !String(form[field] || "").trim()
-    );
-
-    if (missingField) {
-      setFormError(
-        "Name, email, password, student number, first name, last name, gender, and date of birth are required."
-      );
-
-      return;
-    }
-
-    if (form.password.length < 6) {
-      setFormError(
-        "Student password must be at least 6 characters."
-      );
-
-      return;
-    }
-
-    // Prevent future date of birth
-    const today = new Date()
-      .toISOString()
-      .split("T")[0];
-
-    if (form.date_of_birth > today) {
-      setFormError(
-        "Date of birth cannot be in the future."
-      );
-
+  const fetchTeachersCount = async () => {
+    if (
+      !auth?.token ||
+      auth.user?.role === "teacher" ||
+      auth.user?.role === "student"
+    ) {
       return;
     }
 
     try {
-      setSubmitting(true);
-
-      // -----------------------------------------------------
-      // PAYLOAD
-      //
-      // IMPORTANT:
-      // class_name is intentionally NOT included because
-      // the current students table does not contain it.
-      // -----------------------------------------------------
-
-      const payload = {
-        name: form.name.trim(),
-        email: form.email.trim(),
-        password: form.password,
-
-        student_number: form.student_number.trim(),
-        first_name: form.first_name.trim(),
-        last_name: form.last_name.trim(),
-        gender: form.gender,
-        date_of_birth: form.date_of_birth,
-
-        phone: form.phone.trim() || null,
-        address: form.address.trim() || null,
-        guardian_name:
-          form.guardian_name.trim() || null,
-        guardian_phone:
-          form.guardian_phone.trim() || null,
-      };
-
-      const response = await fetch(API_URL, {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json",
-
-          Authorization: `Bearer ${auth.token}`,
-        },
-
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response
-        .json()
-        .catch(() => ({}));
-
-      // -----------------------------------------------------
-      // AUTHORIZATION ERROR
-      // -----------------------------------------------------
-
-      if (
-        response.status === 401 ||
-        response.status === 403
-      ) {
-        handleLogout();
-
-        throw new Error(
-          "Your session has expired. Please log in again."
-        );
-      }
-
-      // -----------------------------------------------------
-      // OTHER BACKEND ERROR
-      // -----------------------------------------------------
+      const response = await fetch(
+        "http://localhost:5000/api/teachers",
+        {
+          headers: {
+            Authorization: `Bearer ${auth.token}`,
+          },
+        }
+      );
 
       if (!response.ok) {
-        throw new Error(
-          data.message ||
-            data.error ||
-            "Unable to register student."
-        );
+        return;
       }
 
-      // -----------------------------------------------------
-      // SUCCESS
-      // -----------------------------------------------------
+      const data = await response.json();
 
-      setSuccess(
-        data.message ||
-          "Student registered successfully!"
-      );
-
-      setForm(emptyForm);
-
-      // Reload student records
-      await fetchStudents();
-
-      // Move to student list after a short delay
-      setTimeout(() => {
-        setActivePage("students");
-        setSuccess("");
-      }, 1200);
+      if (Array.isArray(data)) {
+        setTeachersCount(data.length);
+      } else if (
+        Array.isArray(data.teachers)
+      ) {
+        setTeachersCount(
+          data.teachers.length
+        );
+      } else {
+        setTeachersCount(0);
+      }
     } catch (err) {
-      console.error("Register student error:", err);
-
-      setFormError(
-        err.message ||
-          "Unable to register student."
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // =========================================================
-  // LOGIN
-  // =========================================================
-
-  const handleLogin = (data) => {
-    if (!data?.token) {
       console.error(
-        "Login response did not contain a token."
+        "Failed to fetch teachers:",
+        err
       );
 
-      return;
+      setTeachersCount(0);
     }
-
-    const authentication = {
-      token: data.token,
-      user: data.user || null,
-    };
-
-    localStorage.setItem(
-      "studentHubAuth",
-      JSON.stringify(authentication)
-    );
-
-    setAuth(authentication);
-    setActivePage("dashboard");
   };
 
-  // =========================================================
-  // LOGOUT
-  // =========================================================
+  /*
+  |--------------------------------------------------------------------------
+  | LOGOUT
+  |--------------------------------------------------------------------------
+  */
 
   const handleLogout = () => {
-    localStorage.removeItem("studentHubAuth");
+    localStorage.removeItem(
+      "studentHubAuth"
+    );
 
     setAuth(null);
     setStudents([]);
+    setTeachersCount(0);
     setActivePage("dashboard");
     setSearch("");
     setForm(emptyForm);
     setSuccess("");
     setFormError("");
     setError("");
+    setShowStudentForm(false);
+    setEditingStudentId(null);
   };
 
-  // =========================================================
-  // NAVIGATION
-  // =========================================================
+  /*
+  |--------------------------------------------------------------------------
+  | FORM CHANGE
+  |--------------------------------------------------------------------------
+  */
 
-  const navigate = (page) => {
-    setActivePage(page);
-    setSidebarOpen(false);
+  const handleFormChange = (event) => {
+    const { name, value } = event.target;
+
+    setForm((current) => ({
+      ...current,
+      [name]: value,
+    }));
+  };
+
+  /*
+  |--------------------------------------------------------------------------
+  | OPEN REGISTER FORM
+  |--------------------------------------------------------------------------
+  */
+
+  const openRegisterForm = () => {
+    setForm(emptyForm);
+    setEditingStudentId(null);
+    setFormError("");
+    setSuccess("");
+    setError("");
+
+    setActivePage("register");
+    setShowStudentForm(true);
+  };
+
+  /*
+  |--------------------------------------------------------------------------
+  | OPEN EDIT FORM
+  |--------------------------------------------------------------------------
+  */
+
+  const handleEditStudent = async (student) => {
+    setFormError("");
+    setSuccess("");
+    setError("");
+
+    let dateOfBirth =
+      student.date_of_birth || "";
+
+    if (dateOfBirth) {
+      dateOfBirth = String(
+        dateOfBirth
+      ).split("T")[0];
+    }
+
+    setForm({
+      student_number:
+        student.student_number || "",
+
+      first_name:
+        student.first_name || "",
+
+      last_name:
+        student.last_name || "",
+
+      gender:
+        student.gender || "",
+
+      date_of_birth:
+        dateOfBirth,
+
+      email:
+        student.email || "",
+
+      phone:
+        student.phone || "",
+
+      address:
+        student.address || "",
+
+      guardian_name:
+        student.guardian_name || "",
+
+      guardian_phone:
+        student.guardian_phone || "",
+
+      password: "",
+    });
+
+    setEditingStudentId(student.id);
+    setActivePage("edit");
+    setShowStudentForm(true);
+  };
+
+  /*
+  |--------------------------------------------------------------------------
+  | REGISTER STUDENT
+  |--------------------------------------------------------------------------
+  */
+
+  const handleRegisterStudent = async (
+    event
+  ) => {
+    event.preventDefault();
+
     setSuccess("");
     setFormError("");
-  };
+    setError("");
 
-  // =========================================================
-  // DATE FORMATTER
-  // =========================================================
-
-  const formatDate = (date) => {
-    if (!date) {
-      return "—";
+    if (!auth?.token) {
+      setFormError(
+        "You are not authenticated."
+      );
+      return;
     }
 
-    const parsedDate = new Date(date);
+    try {
+      const response = await fetch(
+        API_URL,
+        {
+          method: "POST",
 
-    if (Number.isNaN(parsedDate.getTime())) {
-      return "—";
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            Authorization:
+              `Bearer ${auth.token}`,
+          },
+
+          body: JSON.stringify(form),
+        }
+      );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            "Failed to register student."
+        );
+      }
+
+      setSuccess(
+        data.message ||
+          "Student registered successfully."
+      );
+
+      setForm(emptyForm);
+      setShowStudentForm(false);
+
+      await fetchStudents();
+
+      setActivePage("students");
+    } catch (err) {
+      console.error(
+        "Failed to register student:",
+        err
+      );
+
+      setFormError(
+        err.message ||
+          "Failed to register student."
+      );
     }
-
-    return parsedDate.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
   };
 
-  // =========================================================
-  // INITIALS
-  // =========================================================
+  /*
+  |--------------------------------------------------------------------------
+  | UPDATE STUDENT
+  |--------------------------------------------------------------------------
+  */
 
-  const getInitials = (
-    firstName,
-    lastName
+  const handleUpdateStudent = async (
+    event
   ) => {
-    return `${firstName?.charAt(0) || ""}${
-      lastName?.charAt(0) || ""
-    }`.toUpperCase();
+    event.preventDefault();
+
+    setSuccess("");
+    setFormError("");
+    setError("");
+
+    if (!auth?.token) {
+      setFormError(
+        "You are not authenticated."
+      );
+      return;
+    }
+
+    if (!editingStudentId) {
+      setFormError(
+        "No student selected for editing."
+      );
+      return;
+    }
+
+    try {
+      const fullName =
+        `${form.first_name} ${form.last_name}`.trim();
+
+      const updateData = {
+        name: fullName,
+
+        email:
+          form.email.trim(),
+
+        student_number:
+          form.student_number.trim(),
+
+        first_name:
+          form.first_name.trim(),
+
+        last_name:
+          form.last_name.trim(),
+
+        gender:
+          form.gender,
+
+        date_of_birth:
+          form.date_of_birth,
+
+        phone:
+          form.phone.trim(),
+
+        address:
+          form.address.trim(),
+
+        guardian_name:
+          form.guardian_name.trim(),
+
+        guardian_phone:
+          form.guardian_phone.trim(),
+      };
+
+      if (
+        form.password &&
+        form.password.trim()
+      ) {
+        updateData.password =
+          form.password.trim();
+      }
+
+      const response = await fetch(
+        `${API_URL}/${editingStudentId}`,
+        {
+          method: "PUT",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            Authorization:
+              `Bearer ${auth.token}`,
+          },
+
+          body: JSON.stringify(
+            updateData
+          ),
+        }
+      );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            "Failed to update student."
+        );
+      }
+
+      setSuccess(
+        data.message ||
+          "Student updated successfully."
+      );
+
+      setForm(emptyForm);
+      setEditingStudentId(null);
+      setShowStudentForm(false);
+
+      await fetchStudents();
+
+      setActivePage("students");
+    } catch (err) {
+      console.error(
+        "Failed to update student:",
+        err
+      );
+
+      setFormError(
+        err.message ||
+          "Failed to update student."
+      );
+    }
   };
 
-  // =========================================================
-  // SHOW LOGIN
-  // =========================================================
+  /*
+  |--------------------------------------------------------------------------
+  | DELETE STUDENT
+  |--------------------------------------------------------------------------
+  */
 
-  if (!auth?.token) {
-    return <Login onLogin={handleLogin} />;
+  const handleDeleteStudent = async (
+    student
+  ) => {
+    const studentName =
+      `${student.first_name || ""} ${
+        student.last_name || ""
+      }`.trim();
+
+    const confirmed =
+      window.confirm(
+        `Are you sure you want to permanently delete ${
+          studentName || "this student"
+        }?\n\nThis action cannot be undone.`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setSuccess("");
+    setError("");
+    setFormError("");
+
+    try {
+      const response = await fetch(
+        `${API_URL}/${student.id}`,
+        {
+          method: "DELETE",
+
+          headers: {
+            Authorization:
+              `Bearer ${auth.token}`,
+          },
+        }
+      );
+
+      const data =
+        await response.json();
+
+      if (response.status === 409) {
+        setError(
+          data.message ||
+            "This student has related records and cannot be permanently deleted. Deactivate the student instead."
+        );
+
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            "Failed to delete student."
+        );
+      }
+
+      setSuccess(
+        data.message ||
+          "Student deleted successfully."
+      );
+
+      await fetchStudents();
+    } catch (err) {
+      console.error(
+        "Failed to delete student:",
+        err
+      );
+
+      setError(
+        err.message ||
+          "Failed to delete student."
+      );
+    }
+  };
+
+  /*
+  |--------------------------------------------------------------------------
+  | ACTIVATE / DEACTIVATE STUDENT
+  |--------------------------------------------------------------------------
+  */
+
+  const handleStudentStatus = async (
+    student
+  ) => {
+    const currentStatus =
+      String(
+        student.account_status ||
+          "active"
+      ).toLowerCase();
+
+    const newStatus =
+      currentStatus === "active"
+        ? "inactive"
+        : "active";
+
+    const studentName =
+      `${student.first_name || ""} ${
+        student.last_name || ""
+      }`.trim();
+
+    const actionText =
+      newStatus === "inactive"
+        ? "deactivate"
+        : "activate";
+
+    const confirmed =
+      window.confirm(
+        `Are you sure you want to ${actionText} ${
+          studentName || "this student"
+        }?`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setSuccess("");
+    setError("");
+    setFormError("");
+
+    try {
+      const response = await fetch(
+        `${API_URL}/${student.id}/status`,
+        {
+          method: "PATCH",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            Authorization:
+              `Bearer ${auth.token}`,
+          },
+
+          body: JSON.stringify({
+            status: newStatus,
+          }),
+        }
+      );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            `Failed to ${actionText} student.`
+        );
+      }
+
+      setSuccess(
+        data.message ||
+          `Student ${actionText}d successfully.`
+      );
+
+      await fetchStudents();
+    } catch (err) {
+      console.error(
+        "Failed to update student status:",
+        err
+      );
+
+      setError(
+        err.message ||
+          `Failed to ${actionText} student.`
+      );
+    }
+  };
+
+  /*
+  |--------------------------------------------------------------------------
+  | CANCEL EDIT / REGISTER
+  |--------------------------------------------------------------------------
+  */
+
+  const handleCancelForm = () => {
+    setForm(emptyForm);
+    setFormError("");
+    setEditingStudentId(null);
+    setShowStudentForm(false);
+    setActivePage("students");
+  };
+
+  /*
+  |--------------------------------------------------------------------------
+  | SEARCH
+  |--------------------------------------------------------------------------
+  */
+
+  const filteredStudents =
+    useMemo(() => {
+      const query =
+        search.trim().toLowerCase();
+
+      if (!query) {
+        return students;
+      }
+
+      return students.filter(
+        (student) => {
+          const values = [
+            student.student_number,
+            student.first_name,
+            student.last_name,
+            student.email,
+            student.phone,
+            student.gender,
+          ];
+
+          return values.some(
+            (value) =>
+              String(value || "")
+                .toLowerCase()
+                .includes(query)
+          );
+        }
+      );
+    }, [students, search]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | DASHBOARD STATISTICS
+  |--------------------------------------------------------------------------
+  */
+
+  const totalStudents =
+    students.length;
+
+  const activeStudents =
+    students.filter((student) => {
+      const status =
+        String(
+          student.account_status ||
+            "active"
+        ).toLowerCase();
+
+      return status === "active";
+    }).length;
+
+  const inactiveStudents =
+    Math.max(
+      totalStudents - activeStudents,
+      0
+    );
+
+  const maleStudents =
+    students.filter(
+      (student) =>
+        String(
+          student.gender || ""
+        ).toLowerCase() === "male"
+    ).length;
+
+  const femaleStudents =
+    students.filter(
+      (student) =>
+        String(
+          student.gender || ""
+        ).toLowerCase() === "female"
+    ).length;
+
+  const activeRate =
+    totalStudents > 0
+      ? Math.round(
+          (activeStudents /
+            totalStudents) *
+            100
+        )
+      : 0;
+
+  const maleRate =
+    totalStudents > 0
+      ? Math.round(
+          (maleStudents /
+            totalStudents) *
+            100
+        )
+      : 0;
+
+  const femaleRate =
+    totalStudents > 0
+      ? Math.round(
+          (femaleStudents /
+            totalStudents) *
+            100
+        )
+      : 0;
+
+  /*
+  |--------------------------------------------------------------------------
+  | ROLE-BASED PORTALS
+  |--------------------------------------------------------------------------
+  */
+
+  if (
+    auth?.user?.role === "teacher"
+  ) {
+    return (
+      <TeacherDashboard
+        auth={auth}
+        onLogout={handleLogout}
+      />
+    );
   }
 
-  // =========================================================
-  // MAIN APPLICATION
-  // =========================================================
+  if (
+    auth?.user?.role === "student"
+  ) {
+    return (
+      <StudentDashboard
+        auth={auth}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | LOGIN
+  |--------------------------------------------------------------------------
+  */
+
+  if (!auth?.token) {
+    return (
+      <Login
+        onLogin={(loginData) => {
+          setAuth(loginData);
+        }}
+      />
+    );
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | ADMIN INFORMATION
+  |--------------------------------------------------------------------------
+  */
+
+  const adminName =
+    auth?.user?.name ||
+    auth?.user?.first_name ||
+    "Administrator";
+
+  const adminRole =
+    auth?.user?.role ||
+    "admin";
+
+  /*
+  |--------------------------------------------------------------------------
+  | PAGE TITLE
+  |--------------------------------------------------------------------------
+  */
+
+  const pageTitle =
+    activePage === "dashboard"
+      ? "Dashboard"
+      : activePage === "students"
+      ? "Students"
+      : activePage === "register"
+      ? "Register Student"
+      : activePage === "edit"
+      ? "Edit Student"
+      : activePage === "teachers"
+      ? "Teacher Management"
+      : activePage === "assignments"
+      ? "Teacher Assignments"
+      : activePage === "classes"
+      ? "Class Management"
+      : activePage === "subjects"
+      ? "Course Units"
+      : activePage === "academic-years"
+      ? "Academic Years"
+      : activePage === "enrollment"
+      ? "Student Enrollment"
+      : activePage === "activity-logs"
+      ? "Activity Logs"
+      : "Dashboard";
+
+  /*
+  |--------------------------------------------------------------------------
+  | PAGE SUBTITLE
+  |--------------------------------------------------------------------------
+  */
+
+  const pageSubtitle =
+    activePage === "dashboard"
+      ? "Welcome to your student management dashboard."
+      : activePage === "students"
+      ? "View and manage registered students."
+      : activePage === "register"
+      ? "Register a new student into the system."
+      : activePage === "edit"
+      ? "Update the student's information."
+      : activePage === "teachers"
+      ? "Manage teachers and teacher accounts."
+      : activePage === "assignments"
+      ? "Assign teachers to classes and subjects."
+      : activePage === "classes"
+      ? "Create and manage school classes."
+      : activePage === "subjects"
+      ? "Manage subjects and course units."
+      : activePage === "academic-years"
+      ? "Create and manage academic years."
+      : activePage === "enrollment"
+      ? "Manage student class enrollment."
+      : activePage === "activity-logs"
+      ? "Monitor administrator activity across the system."
+      : "";
 
   return (
-    <div className="app">
-      {sidebarOpen && (
-        <div
-          className="mobile-overlay"
-          onClick={() =>
-            setSidebarOpen(false)
-          }
-        />
-      )}
+    <div className="app-shell">
 
       {/* =====================================================
           SIDEBAR
-      ===================================================== */}
+      ====================================================== */}
 
-      <aside
-        className={`sidebar ${
-          sidebarOpen
-            ? "sidebar-open"
-            : ""
-        }`}
-      >
-        <div className="brand">
+      <aside className="sidebar">
+
+        <div className="sidebar-brand">
+
           <div className="brand-logo">
-            SM
+            CFCI
           </div>
 
           <div>
-            <h2>
-              Student<span>Hub</span>
-            </h2>
+            <div className="brand-title">
+              FORENSICS DEPARTMENT
+            </div>
 
-            <p>
+            <div className="brand-subtitle">
               Management System
-            </p>
+            </div>
           </div>
+
         </div>
 
-        <nav className="navigation">
-          <p className="nav-title">
-            MAIN MENU
-          </p>
+        <nav className="sidebar-nav">
+
+          {/* DASHBOARD */}
 
           <button
+            type="button"
             className={`nav-item ${
               activePage === "dashboard"
                 ? "active"
                 : ""
             }`}
-            onClick={() =>
-              navigate("dashboard")
-            }
+            onClick={() => {
+              setActivePage("dashboard");
+              setSuccess("");
+              setFormError("");
+              setError("");
+            }}
           >
             <span className="nav-icon">
               ⌂
             </span>
 
-            Dashboard
+            <span>
+              Dashboard
+            </span>
           </button>
 
+          {/* STUDENTS */}
+
           <button
+            type="button"
             className={`nav-item ${
               activePage === "students"
                 ? "active"
                 : ""
             }`}
-            onClick={() =>
-              navigate("students")
-            }
+            onClick={() => {
+              setActivePage("students");
+              setSuccess("");
+              setFormError("");
+              setError("");
+            }}
           >
             <span className="nav-icon">
-              ♙
+              ◉
             </span>
 
-            Students
-
-            <span className="nav-badge">
-              {totalStudents}
+            <span>
+              Students
             </span>
           </button>
 
-          <p className="nav-title menu-spacing">
-            MANAGEMENT
-          </p>
+          {/* REGISTER */}
 
           <button
+            type="button"
             className={`nav-item ${
               activePage === "register"
                 ? "active"
                 : ""
             }`}
-            onClick={() =>
-              navigate("register")
+            onClick={
+              openRegisterForm
             }
           >
             <span className="nav-icon">
-              ＋
+              +
             </span>
 
-            Register Student
+            <span>
+              Register Student
+            </span>
           </button>
+
+          {/* TEACHERS */}
+
+          <button
+            type="button"
+            className={`nav-item ${
+              activePage === "teachers"
+                ? "active"
+                : ""
+            }`}
+            onClick={() => {
+              setActivePage("teachers");
+              setSuccess("");
+              setFormError("");
+              setError("");
+            }}
+          >
+            <span className="nav-icon">
+              ◉
+            </span>
+
+            <span>
+              Teachers
+            </span>
+          </button>
+
+          {/* ASSIGNMENTS */}
+
+          <button
+            type="button"
+            className={`nav-item ${
+              activePage === "assignments"
+                ? "active"
+                : ""
+            }`}
+            onClick={() => {
+              setActivePage("assignments");
+              setSuccess("");
+              setFormError("");
+              setError("");
+            }}
+          >
+            <span className="nav-icon">
+              ⇄
+            </span>
+
+            <span>
+              Teacher Assignments
+            </span>
+          </button>
+
+          {/* CLASSES */}
+
+          <button
+            type="button"
+            className={`nav-item ${
+              activePage === "classes"
+                ? "active"
+                : ""
+            }`}
+            onClick={() => {
+              setActivePage("classes");
+              setSuccess("");
+              setFormError("");
+              setError("");
+            }}
+          >
+            <span className="nav-icon">
+              ▣
+            </span>
+
+            <span>
+              Classes
+            </span>
+          </button>
+
+          {/* COURSE UNITS */}
+
+          <button
+            type="button"
+            className={`nav-item ${
+              activePage === "subjects"
+                ? "active"
+                : ""
+            }`}
+            onClick={() => {
+              setActivePage("subjects");
+              setSuccess("");
+              setFormError("");
+              setError("");
+            }}
+          >
+            <span className="nav-icon">
+              ▣
+            </span>
+
+            <span>
+              Course Units
+            </span>
+          </button>
+
+          {/* ACADEMIC YEARS */}
+
+          <button
+            type="button"
+            className={`nav-item ${
+              activePage === "academic-years"
+                ? "active"
+                : ""
+            }`}
+            onClick={() => {
+              setActivePage("academic-years");
+              setSuccess("");
+              setFormError("");
+              setError("");
+            }}
+          >
+            <span className="nav-icon">
+              ▣
+            </span>
+
+            <span>
+              Academic Years
+            </span>
+          </button>
+
+          {/* ENROLLMENT */}
+
+          <button
+            type="button"
+            className={`nav-item ${
+              activePage === "enrollment"
+                ? "active"
+                : ""
+            }`}
+            onClick={() => {
+              setActivePage("enrollment");
+              setSuccess("");
+              setFormError("");
+              setError("");
+            }}
+          >
+            <span className="nav-icon">
+              ✓
+            </span>
+
+            <span>
+              Student Enrollment
+            </span>
+          </button>
+
+          {/* ACTIVITY LOGS - ADMIN ONLY */}
+
+          {auth?.user?.role === "admin" && (
+            <button
+              type="button"
+              className={`nav-item ${
+                activePage === "activity-logs"
+                  ? "active"
+                  : ""
+              }`}
+              onClick={() => {
+                setActivePage("activity-logs");
+                setSuccess("");
+                setFormError("");
+                setError("");
+              }}
+            >
+              <span className="nav-icon">
+                ◷
+              </span>
+
+              <span>
+                Activity Logs
+              </span>
+            </button>
+          )}
+
         </nav>
 
+        {/* SIDEBAR BOTTOM */}
+
         <div className="sidebar-bottom">
+
           <div className="admin-card">
+
             <div className="admin-avatar">
-              {auth.user?.first_name?.charAt(
-                0
-              ) ||
-                auth.user?.name?.charAt(0) ||
-                "A"}
+              {adminName
+                .charAt(0)
+                .toUpperCase()}
             </div>
 
-            <div>
+            <div className="admin-info">
+
               <strong>
-                {auth.user?.first_name
-                  ? `${auth.user.first_name} ${
-                      auth.user.last_name ||
-                      ""
-                    }`
-                  : auth.user?.name ||
-                    "Administrator"}
+                {adminName}
               </strong>
 
               <span>
-                System Admin
+                {adminRole}
               </span>
+
             </div>
+
           </div>
 
           <button
+            type="button"
             className="logout-button"
-            onClick={handleLogout}
+            onClick={() => {
+              const confirmed =
+                window.confirm(
+                  "Are you sure you want to logout?"
+                );
+
+              if (confirmed) {
+                handleLogout();
+              }
+            }}
           >
-            ⇥ Logout
+
+            <span
+              className="logout-icon"
+              aria-hidden="true"
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M10 17L15 12L10 7"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+
+                <path
+                  d="M15 12H3"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+
+                <path
+                  d="M21 3V21"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </span>
+
+            <span>
+              Logout
+            </span>
+
           </button>
+
         </div>
+
       </aside>
 
       {/* =====================================================
-          MAIN
-      ===================================================== */}
+          MAIN CONTENT
+      ====================================================== */}
 
       <main className="main-content">
+
+        {/* TOP BAR */}
+
         <header className="topbar">
-          <button
-            className="mobile-menu"
-            onClick={() =>
-              setSidebarOpen(true)
-            }
-          >
-            ☰
-          </button>
 
-          <div className="breadcrumb">
-            <span>
-              Student Management
-            </span>
+          <div>
 
-            <strong>/</strong>
+            <h1>
+              {pageTitle}
+            </h1>
 
-            <b>
-              {activePage ===
-              "dashboard"
-                ? "Dashboard"
-                : activePage ===
-                  "students"
-                ? "Students"
-                : "Register Student"}
-            </b>
+            <p>
+              {pageSubtitle}
+            </p>
+
           </div>
 
-          <div className="topbar-right">
-            <button className="notification-button">
-              ♧
-              <span />
-            </button>
+          <div className="topbar-user">
 
-            <div className="top-admin">
-              <div className="top-admin-avatar">
-                {auth.user?.first_name?.charAt(
-                  0
-                ) ||
-                  auth.user?.name?.charAt(0) ||
-                  "A"}
-              </div>
-
-              <div>
-                <strong>
-                  {auth.user?.first_name ||
-                    auth.user?.name ||
-                    "Admin"}
-                </strong>
-
-                <small>
-                  Administrator
-                </small>
-              </div>
+            <div className="topbar-avatar">
+              {adminName
+                .charAt(0)
+                .toUpperCase()}
             </div>
+
+            <div>
+
+              <strong>
+                {adminName}
+              </strong>
+
+              <span>
+                {adminRole}
+              </span>
+
+            </div>
+
           </div>
+
         </header>
 
-        <div className="page-content">
-          {/* =================================================
-              DASHBOARD
-          ================================================= */}
+        {/* ERROR */}
 
-          {activePage ===
-            "dashboard" && (
-            <Dashboard
-              students={students}
-              totalStudents={
-                totalStudents
-              }
-              maleStudents={
-                maleStudents
-              }
-              femaleStudents={
-                femaleStudents
-              }
-              recentStudents={
-                recentStudents
-              }
-              loading={loading}
-              error={error}
-              formatDate={formatDate}
-              getInitials={
-                getInitials
-              }
-              navigate={navigate}
-              fetchStudents={
-                fetchStudents
-              }
-            />
-          )}
+        {error && (
+          <div className="alert alert-error">
+            {error}
+          </div>
+        )}
 
-          {/* =================================================
-              STUDENTS
-          ================================================= */}
+        {/* SUCCESS */}
 
-          {activePage ===
-            "students" && (
-            <StudentsPage
-              students={
-                filteredStudents
-              }
-              totalStudents={
-                totalStudents
-              }
-              loading={loading}
-              error={error}
-              search={search}
-              setSearch={setSearch}
-              formatDate={
-                formatDate
-              }
-              getInitials={
-                getInitials
-              }
-              fetchStudents={
-                fetchStudents
-              }
-              navigate={navigate}
-            />
-          )}
+        {success && (
+          <div className="alert alert-success">
+            {success}
+          </div>
+        )}
 
-          {/* =================================================
-              REGISTER
-          ================================================= */}
+        {/* =====================================================
+            DASHBOARD
+        ====================================================== */}
 
-          {activePage ===
-            "register" && (
-            <RegisterPage
-              form={form}
-              handleInputChange={
-                handleInputChange
-              }
-              handleSubmit={
-                handleSubmit
-              }
-              submitting={
-                submitting
-              }
-              success={success}
-              formError={
-                formError
-              }
-            />
-          )}
-        </div>
-      </main>
-    </div>
-  );
-}
+        {activePage === "dashboard" && (
+          <section className="page-content dashboard-page">
 
-/* =========================================================
-   DASHBOARD
-========================================================= */
+            <div className="page-heading">
 
-function Dashboard({
-  students,
-  totalStudents,
-  maleStudents,
-  femaleStudents,
-  recentStudents,
-  loading,
-  error,
-  formatDate,
-  getInitials,
-  navigate,
-  fetchStudents,
-}) {
-  return (
-    <>
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">
-            OVERVIEW
-          </p>
+              <div>
 
-          <h1>
-            Good afternoon 👋
-          </h1>
+                <span className="eyebrow">
+                  OVERVIEW
+                </span>
 
-          <p className="heading-description">
-            Here's what's happening
-            with your students today.
-          </p>
-        </div>
+                <h1>
+                  Dashboard
+                </h1>
 
-        <button
-          className="primary-button"
-          onClick={() =>
-            navigate("register")
-          }
-        >
-          <span>＋</span>
-          Register Student
-        </button>
-      </div>
+                <p className="heading-description">
+                  Monitor student activity, staff capacity and key school statistics
+                  from one central workspace.
+                </p>
 
-      <section className="stats-grid">
-        <StatCard
-          title="Total Students"
-          value={totalStudents}
-          icon="♙"
-          description="All registered students"
-        />
+              </div>
 
-        <StatCard
-          title="Male Students"
-          value={maleStudents}
-          icon="♂"
-          description="Registered male students"
-        />
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => {
+                  setActivePage("students");
+                  setSearch("");
+                  setSuccess("");
+                  setFormError("");
+                  setError("");
+                }}
+              >
+                View Student Records
+              </button>
 
-        <StatCard
-          title="Female Students"
-          value={femaleStudents}
-          icon="♀"
-          description="Registered female students"
-        />
-
-        <StatCard
-          title="Recent Registrations"
-          value={Math.min(
-            students.length,
-            5
-          )}
-          icon="↗"
-          description="Latest student records"
-        />
-      </section>
-
-      <section className="dashboard-grid">
-        <div className="content-card recent-card">
-          <div className="card-header">
-            <div>
-              <h2>
-                Recent Students
-              </h2>
-
-              <p>
-                Latest registered
-                students
-              </p>
             </div>
 
-            <button
-              className="text-button"
-              onClick={() =>
-                navigate("students")
-              }
-            >
-              View all →
-            </button>
-          </div>
+            <div className="stats-grid dashboard-stats">
 
-          {loading ? (
-            <Loading />
-          ) : error ? (
-            <ErrorBox
-              message={error}
-            />
-          ) : recentStudents.length ===
-            0 ? (
-            <EmptyState />
-          ) : (
-            <div className="recent-list">
-              {recentStudents.map(
-                (student) => (
-                  <div
-                    className="recent-student"
-                    key={student.id}
-                  >
-                    <div className="student-avatar">
-                      {getInitials(
-                        student.first_name,
-                        student.last_name
-                      )}
+              <div className="stat-card stat-card-blue">
+
+                <div className="stat-top">
+
+                  <div className="stat-icon">
+                    ◉
+                  </div>
+
+                  <span className="stat-status">
+                    Students
+                  </span>
+
+                </div>
+
+                <div className="stat-value">
+                  {totalStudents}
+                </div>
+
+                <h3>
+                  Total Students
+                </h3>
+
+                <p>
+                  All registered student accounts
+                </p>
+
+              </div>
+
+              <div className="stat-card stat-card-green">
+
+                <div className="stat-top">
+
+                  <div className="stat-icon">
+                    ✓
+                  </div>
+
+                  <span className="stat-status">
+                    Active
+                  </span>
+
+                </div>
+
+                <div className="stat-value">
+                  {activeStudents}
+                </div>
+
+                <h3>
+                  Active Students
+                </h3>
+
+                <p>
+                  {activeRate}% of registered students
+                </p>
+
+              </div>
+
+              <div className="stat-card stat-card-amber">
+
+                <div className="stat-top">
+
+                  <div className="stat-icon">
+                    ◌
+                  </div>
+
+                  <span className="stat-status">
+                    Inactive
+                  </span>
+
+                </div>
+
+                <div className="stat-value">
+                  {inactiveStudents}
+                </div>
+
+                <h3>
+                  Inactive Students
+                </h3>
+
+                <p>
+                  Accounts currently inactive
+                </p>
+
+              </div>
+
+              <div className="stat-card stat-card-purple">
+
+                <div className="stat-top">
+
+                  <div className="stat-icon">
+                    ◈
+                  </div>
+
+                  <span className="stat-status">
+                    Staff
+                  </span>
+
+                </div>
+
+                <div className="stat-value">
+                  {teachersCount}
+                </div>
+
+                <h3>
+                  Teachers
+                </h3>
+
+                <p>
+                  Registered teaching staff
+                </p>
+
+              </div>
+
+            </div>
+
+            <div className="dashboard-grid dashboard-analytics-grid">
+
+              <div className="content-card dashboard-overview-card">
+
+                <div className="content-card-header dashboard-card-header">
+
+                  <div>
+
+                    <h2>
+                      Student Overview
+                    </h2>
+
+                    <p>
+                      Current student population and account activity
+                    </p>
+
+                  </div>
+
+                  <span className="dashboard-period">
+                    Current
+                  </span>
+
+                </div>
+
+                <div className="overview-body">
+
+                  <div className="overview-highlight">
+
+                    <div className="overview-ring">
+
+                      <div
+                        className="overview-ring-fill"
+                        style={{
+                          background: `conic-gradient(var(--primary) ${activeRate}%, #e9eef5 ${activeRate}% 100%)`,
+                        }}
+                      >
+
+                        <div className="overview-ring-center">
+
+                          <strong>
+                            {activeRate}%
+                          </strong>
+
+                          <span>
+                            Active
+                          </span>
+
+                        </div>
+
+                      </div>
+
                     </div>
 
-                    <div className="student-main">
+                    <div className="overview-copy">
+
                       <strong>
-                        {
-                          student.first_name
-                        }{" "}
-                        {
-                          student.last_name
-                        }
+                        Student activity
                       </strong>
 
                       <span>
-                        {
-                          student.student_number
-                        }
-                      </span>
-                    </div>
-
-                    <div className="student-program">
-                      <span>
-                        {student.email ||
-                          "No email"}
+                        {activeStudents} of {totalStudents} registered students
+                        are currently active.
                       </span>
 
-                      <small>
-                        {formatDate(
-                          student.created_at
-                        )}
-                      </small>
+                      <div className="overview-legend">
+
+                        <span>
+                          <i className="legend-dot active-dot"></i>
+                          Active
+                        </span>
+
+                        <span>
+                          <i className="legend-dot inactive-dot"></i>
+                          Inactive
+                        </span>
+
+                      </div>
+
                     </div>
+
+                  </div>
+
+                  <div className="metric-bars">
+
+                    <div className="metric-bar-row">
+
+                      <div className="metric-bar-label">
+
+                        <span>
+                          Active students
+                        </span>
+
+                        <strong>
+                          {activeStudents}
+                        </strong>
+
+                      </div>
+
+                      <div className="metric-track">
+
+                        <span
+                          className="metric-fill active-fill"
+                          style={{
+                            width: `${activeRate}%`,
+                          }}
+                        ></span>
+
+                      </div>
+
+                    </div>
+
+                    <div className="metric-bar-row">
+
+                      <div className="metric-bar-label">
+
+                        <span>
+                          Inactive students
+                        </span>
+
+                        <strong>
+                          {inactiveStudents}
+                        </strong>
+
+                      </div>
+
+                      <div className="metric-track">
+
+                        <span
+                          className="metric-fill inactive-fill"
+                          style={{
+                            width: `${
+                              totalStudents > 0
+                                ? Math.round(
+                                    (inactiveStudents /
+                                      totalStudents) *
+                                      100
+                                  )
+                                : 0
+                            }%`,
+                          }}
+                        ></span>
+
+                      </div>
+
+                    </div>
+
+                    <div className="metric-bar-row">
+
+                      <div className="metric-bar-label">
+
+                        <span>
+                          Teachers
+                        </span>
+
+                        <strong>
+                          {teachersCount}
+                        </strong>
+
+                      </div>
+
+                      <div className="metric-track">
+
+                        <span
+                          className="metric-fill teacher-fill"
+                          style={{
+                            width: `${
+                              teachersCount > 0
+                                ? 100
+                                : 0
+                            }%`,
+                          }}
+                        ></span>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              <div className="content-card dashboard-demographics-card">
+
+                <div className="content-card-header dashboard-card-header">
+
+                  <div>
+
+                    <h2>
+                      Student Demographics
+                    </h2>
+
+                    <p>
+                      Gender distribution
+                    </p>
+
+                  </div>
+
+                </div>
+
+                <div className="demographics-body">
+
+                  <div className="demographic-total">
+
+                    <span>
+                      Total population
+                    </span>
+
+                    <strong>
+                      {totalStudents}
+                    </strong>
+
+                  </div>
+
+                  <div className="demographic-row">
+
+                    <div className="demographic-label">
+
+                      <span className="demographic-icon male-icon">
+                        M
+                      </span>
+
+                      <div>
+
+                        <strong>
+                          Male
+                        </strong>
+
+                        <small>
+                          {maleRate}% of students
+                        </small>
+
+                      </div>
+
+                    </div>
+
+                    <strong>
+                      {maleStudents}
+                    </strong>
+
+                  </div>
+
+                  <div className="demographic-row">
+
+                    <div className="demographic-label">
+
+                      <span className="demographic-icon female-icon">
+                        F
+                      </span>
+
+                      <div>
+
+                        <strong>
+                          Female
+                        </strong>
+
+                        <small>
+                          {femaleRate}% of students
+                        </small>
+
+                      </div>
+
+                    </div>
+
+                    <strong>
+                      {femaleStudents}
+                    </strong>
+
+                  </div>
+
+                  <div className="demographic-progress">
 
                     <span
-                      className={`gender-badge ${
-                        student.gender?.toLowerCase() ===
-                        "female"
-                          ? "female"
-                          : "male"
-                      }`}
-                    >
-                      {student.gender ||
-                        "—"}
-                    </span>
+                      style={{
+                        width: `${Math.min(
+                          maleRate,
+                          100
+                        )}%`,
+                      }}
+                    ></span>
+
+                    <span
+                      style={{
+                        width: `${Math.min(
+                          femaleRate,
+                          100
+                        )}%`,
+                      }}
+                    ></span>
+
                   </div>
-                )
-              )}
+
+                  <div className="system-health">
+
+                    <div className="health-icon">
+                      ✓
+                    </div>
+
+                    <div>
+
+                      <strong>
+                        System status
+                      </strong>
+
+                      <span>
+                        All core services are active
+                      </span>
+
+                    </div>
+
+                    <b>
+                      Active
+                    </b>
+
+                  </div>
+
+                </div>
+
+              </div>
+
             </div>
-          )}
-        </div>
 
-        <div className="content-card quick-card">
-          <div className="card-header">
-            <div>
-              <h2>
-                Quick Actions
-              </h2>
+            <div className="content-card dashboard-table-card">
 
-              <p>
-                Common tasks
-              </p>
-            </div>
-          </div>
+              <div className="content-card-header dashboard-card-header">
 
-          <div className="quick-actions">
-            <button
-              onClick={() =>
-                navigate("register")
-              }
-            >
-              <div className="quick-icon blue">
-                ＋
-              </div>
+                <div>
 
-              <div>
-                <strong>
-                  Register Student
-                </strong>
+                  <h2>
+                    Recent Students
+                  </h2>
 
-                <span>
-                  Add a new student
-                  record
-                </span>
-              </div>
+                  <p>
+                    Latest registered student records
+                  </p>
 
-              <b>→</b>
-            </button>
+                </div>
 
-            <button
-              onClick={() =>
-                navigate("students")
-              }
-            >
-              <div className="quick-icon green">
-                ♙
-              </div>
-
-              <div>
-                <strong>
-                  View Students
-                </strong>
-
-                <span>
-                  Browse all student
-                  records
-                </span>
-              </div>
-
-              <b>→</b>
-            </button>
-
-            <button
-              onClick={fetchStudents}
-            >
-              <div className="quick-icon purple">
-                ↻
-              </div>
-
-              <div>
-                <strong>
-                  Refresh Data
-                </strong>
-
-                <span>
-                  Reload database
-                  records
-                </span>
-              </div>
-
-              <b>→</b>
-            </button>
-          </div>
-        </div>
-      </section>
-    </>
-  );
-}
-
-/* =========================================================
-   STAT CARD
-========================================================= */
-
-function StatCard({
-  title,
-  value,
-  icon,
-  description,
-}) {
-  return (
-    <div className="stat-card">
-      <div className="stat-top">
-        <div className="stat-icon">
-          {icon}
-        </div>
-
-        <span className="stat-status">
-          Live
-        </span>
-      </div>
-
-      <div className="stat-value">
-        {value}
-      </div>
-
-      <h3>{title}</h3>
-
-      <p>{description}</p>
-    </div>
-  );
-}
-
-/* =========================================================
-   STUDENTS PAGE
-========================================================= */
-
-function StudentsPage({
-  students,
-  totalStudents,
-  loading,
-  error,
-  search,
-  setSearch,
-  formatDate,
-  getInitials,
-  fetchStudents,
-  navigate,
-}) {
-  return (
-    <>
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">
-            STUDENT MANAGEMENT
-          </p>
-
-          <h1>
-            Students
-          </h1>
-
-          <p className="heading-description">
-            Manage and view all
-            registered students.
-          </p>
-        </div>
-
-        <button
-          className="primary-button"
-          onClick={() =>
-            navigate("register")
-          }
-        >
-          <span>＋</span>
-          Register Student
-        </button>
-      </div>
-
-      <div className="content-card students-card">
-        <div className="students-toolbar">
-          <div>
-            <h2>
-              All Students
-            </h2>
-
-            <p>
-              {totalStudents} student
-              {totalStudents !== 1
-                ? " records"
-                : " record"}
-            </p>
-          </div>
-
-          <div className="toolbar-actions">
-            <div className="search-box">
-              <span>⌕</span>
-
-              <input
-                type="text"
-                placeholder="Search students..."
-                value={search}
-                onChange={(event) =>
-                  setSearch(
-                    event.target.value
-                  )
-                }
-              />
-
-              {search && (
                 <button
-                  onClick={() =>
-                    setSearch("")
-                  }
                   type="button"
+                  className="text-button dashboard-view-all"
+                  onClick={() => {
+                    setActivePage("students");
+                    setSearch("");
+                  }}
                 >
-                  ×
+                  View all students →
                 </button>
+
+              </div>
+
+              {loading ? (
+                <div className="empty-state">
+
+                  <div className="large-spinner"></div>
+
+                  <p>
+                    Loading student records...
+                  </p>
+
+                </div>
+              ) : students.length === 0 ? (
+                <div className="empty-state">
+
+                  <div className="empty-icon">
+                    ◉
+                  </div>
+
+                  <h3>
+                    No students registered
+                  </h3>
+
+                  <p>
+                    Register the first student to start building your student records.
+                  </p>
+
+                </div>
+              ) : (
+                <div className="table-wrapper">
+
+                  <table className="student-table dashboard-student-table">
+
+                    <thead>
+
+                      <tr>
+
+                        <th>
+                          Student
+                        </th>
+
+                        <th>
+                          Student Number
+                        </th>
+
+                        <th>
+                          Gender
+                        </th>
+
+                        <th>
+                          Email
+                        </th>
+
+                        <th>
+                          Phone
+                        </th>
+
+                        <th>
+                          Status
+                        </th>
+
+                        <th>
+                          Actions
+                        </th>
+
+                      </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                      {students
+                        .slice(0, 5)
+                        .map((student) => {
+
+                          const status =
+                            String(
+                              student.account_status ||
+                                "active"
+                            ).toLowerCase();
+
+                          const studentName =
+                            `${
+                              student.first_name ||
+                              ""
+                            } ${
+                              student.last_name ||
+                              ""
+                            }`.trim() ||
+                            "Unnamed Student";
+
+                          const initials =
+                            studentName
+                              .split(" ")
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map(
+                                (part) =>
+                                  part
+                                    .charAt(0)
+                                    .toUpperCase()
+                              )
+                              .join("");
+
+                          return (
+                            <tr
+                              key={
+                                student.id
+                              }
+                            >
+
+                              <td>
+
+                                <div className="table-student">
+
+                                  <div className="table-avatar">
+                                    {initials}
+                                  </div>
+
+                                  <div>
+
+                                    <strong>
+                                      {studentName}
+                                    </strong>
+
+                                    <span>
+                                      {
+                                        student.email ||
+                                        "No email provided"
+                                      }
+                                    </span>
+
+                                  </div>
+
+                                </div>
+
+                              </td>
+
+                              <td>
+
+                                <span className="student-number-cell">
+                                  {
+                                    student.student_number ||
+                                    "—"
+                                  }
+                                </span>
+
+                              </td>
+
+                              <td>
+
+                                <span
+                                  className={`gender-badge ${
+                                    String(
+                                      student.gender ||
+                                        ""
+                                    ).toLowerCase() ===
+                                    "female"
+                                      ? "female"
+                                      : ""
+                                  }`}
+                                >
+                                  {
+                                    student.gender ||
+                                    "Not specified"
+                                  }
+                                </span>
+
+                              </td>
+
+                              <td>
+
+                                <span className="table-primary-text">
+                                  {
+                                    student.email ||
+                                    "—"
+                                  }
+                                </span>
+
+                              </td>
+
+                              <td>
+
+                                <span className="table-primary-text">
+                                  {
+                                    student.phone ||
+                                    "—"
+                                  }
+                                </span>
+
+                              </td>
+
+                              <td>
+
+                                <span
+                                  className={
+                                    status ===
+                                    "active"
+                                      ? "status-active"
+                                      : "status-inactive"
+                                  }
+                                >
+                                  {status}
+                                </span>
+
+                              </td>
+
+                              <td>
+
+                                <div className="table-actions">
+
+                                  <button
+                                    type="button"
+                                    className="table-action-button edit-action"
+                                    onClick={() =>
+                                      handleEditStudent(
+                                        student
+                                      )
+                                    }
+                                  >
+                                    Edit
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className="table-action-button delete-action"
+                                    onClick={() =>
+                                      handleDeleteStudent(
+                                        student
+                                      )
+                                    }
+                                  >
+                                    Delete
+                                  </button>
+
+                                </div>
+
+                              </td>
+
+                            </tr>
+                          );
+                        })}
+
+                    </tbody>
+
+                  </table>
+
+                </div>
               )}
+
+              {students.length > 5 && (
+                <div className="table-footer dashboard-table-footer">
+                  Showing 5 of {students.length} registered students
+                </div>
+              )}
+
             </div>
 
-            <button
-              className="secondary-button"
-              onClick={fetchStudents}
-            >
-              ↻ Refresh
-            </button>
-          </div>
-        </div>
+          </section>
+        )}
 
-        {loading ? (
-          <Loading />
-        ) : error ? (
-          <ErrorBox
-            message={error}
-          />
-        ) : students.length === 0 ? (
-          <EmptyState
-            search={search}
-          />
-        ) : (
-          <div className="table-wrapper">
-            <table className="student-table">
-              <thead>
-                <tr>
-                  <th>
-                    STUDENT
-                  </th>
+        {/* =====================================================
+            STUDENTS
+        ====================================================== */}
 
-                  <th>
-                    GENDER
-                  </th>
+        {activePage ===
+          "students" && (
+          <section className="page-content">
 
-                  <th>
-                    DATE OF BIRTH
-                  </th>
+            <div className="content-card">
 
-                  <th>
-                    CONTACT
-                  </th>
+              <div className="content-card-header">
 
-                  <th>
-                    GUARDIAN
-                  </th>
+                <div>
 
-                  <th>
-                    REGISTERED
-                  </th>
-                </tr>
-              </thead>
+                  <h2>
+                    Student Records
+                  </h2>
 
-              <tbody>
-                {students.map(
-                  (student) => (
-                    <tr
-                      key={
-                        student.id
+                  <p>
+                    Search and manage
+                    student records.
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={
+                    openRegisterForm
+                  }
+                >
+                  + Register Student
+                </button>
+
+              </div>
+
+              <div className="search-row">
+
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(event) =>
+                    setSearch(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Search by student number, name, email..."
+                />
+
+              </div>
+
+              {loading ? (
+                <div className="empty-state">
+                  Loading students...
+                </div>
+              ) : filteredStudents.length ===
+                0 ? (
+                <div className="empty-state">
+                  No matching students
+                  found.
+                </div>
+              ) : (
+                <div className="table-wrapper">
+
+                  <table>
+
+                    <thead>
+
+                      <tr>
+
+                        <th>
+                          Student Number
+                        </th>
+
+                        <th>
+                          Name
+                        </th>
+
+                        <th>
+                          Gender
+                        </th>
+
+                        <th>
+                          Date of Birth
+                        </th>
+
+                        <th>
+                          Email
+                        </th>
+
+                        <th>
+                          Phone
+                        </th>
+
+                        <th>
+                          Status
+                        </th>
+
+                        <th>
+                          Actions
+                        </th>
+
+                      </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                      {filteredStudents.map(
+                        (student) => {
+
+                          const status =
+                            String(
+                              student.account_status ||
+                                "active"
+                            ).toLowerCase();
+
+                          return (
+                            <tr
+                              key={
+                                student.id
+                              }
+                            >
+
+                              <td>
+                                {
+                                  student.student_number
+                                }
+                              </td>
+
+                              <td>
+                                {
+                                  student.first_name
+                                }{" "}
+                                {
+                                  student.last_name
+                                }
+                              </td>
+
+                              <td>
+                                {
+                                  student.gender ||
+                                  "—"
+                                }
+                              </td>
+
+                              <td>
+                                {student.date_of_birth
+                                  ? String(
+                                      student.date_of_birth
+                                    ).split(
+                                      "T"
+                                    )[0]
+                                  : "—"}
+                              </td>
+
+                              <td>
+                                {student.email ||
+                                  "—"}
+                              </td>
+
+                              <td>
+                                {student.phone ||
+                                  "—"}
+                              </td>
+
+                              <td>
+
+                                <span
+                                  className={
+                                    status ===
+                                    "active"
+                                      ? "status-active"
+                                      : "status-inactive"
+                                  }
+                                >
+                                  {status}
+                                </span>
+
+                              </td>
+
+                              <td>
+
+                                <div
+                                  style={{
+                                    display:
+                                      "flex",
+                                    gap:
+                                      "8px",
+                                    flexWrap:
+                                      "wrap",
+                                  }}
+                                >
+
+                                  <button
+                                    type="button"
+                                    className="secondary-button"
+                                    onClick={() =>
+                                      handleEditStudent(
+                                        student
+                                      )
+                                    }
+                                  >
+                                    Edit
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className="secondary-button"
+                                    onClick={() =>
+                                      handleStudentStatus(
+                                        student
+                                      )
+                                    }
+                                  >
+                                    {status ===
+                                    "active"
+                                      ? "Deactivate"
+                                      : "Activate"}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className="danger-button"
+                                    onClick={() =>
+                                      handleDeleteStudent(
+                                        student
+                                      )
+                                    }
+                                  >
+                                    Delete
+                                  </button>
+
+                                </div>
+
+                              </td>
+
+                            </tr>
+                          );
+                        }
+                      )}
+
+                    </tbody>
+
+                  </table>
+
+                </div>
+              )}
+
+            </div>
+
+          </section>
+        )}
+
+        {/* =====================================================
+            REGISTER STUDENT
+        ====================================================== */}
+
+        {activePage ===
+          "register" && (
+          <section className="page-content">
+
+            <div className="content-card">
+
+              <div className="content-card-header">
+
+                <div>
+
+                  <h2>
+                    Register Student
+                  </h2>
+
+                  <p>
+                    Create a new student
+                    record.
+                  </p>
+
+                </div>
+
+              </div>
+
+              {formError && (
+                <div className="alert alert-error">
+                  {formError}
+                </div>
+              )}
+
+              {showStudentForm && (
+                <form
+                  className="student-form"
+                  onSubmit={
+                    handleRegisterStudent
+                  }
+                >
+
+                  <div className="form-grid">
+
+                    <div className="form-group">
+
+                      <label>
+                        Student Number
+                      </label>
+
+                      <input
+                        type="text"
+                        name="student_number"
+                        value={
+                          form.student_number
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        required
+                        placeholder="e.g. STU003"
+                      />
+
+                    </div>
+
+                    <div className="form-group">
+
+                      <label>
+                        Gender
+                      </label>
+
+                      <select
+                        name="gender"
+                        value={
+                          form.gender
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        required
+                      >
+
+                        <option value="">
+                          Select gender
+                        </option>
+
+                        <option value="Male">
+                          Male
+                        </option>
+
+                        <option value="Female">
+                          Female
+                        </option>
+
+                      </select>
+
+                    </div>
+
+                    <div className="form-group">
+
+                      <label>
+                        First Name
+                      </label>
+
+                      <input
+                        type="text"
+                        name="first_name"
+                        value={
+                          form.first_name
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        required
+                        placeholder="First name"
+                      />
+
+                    </div>
+
+                    <div className="form-group">
+
+                      <label>
+                        Last Name
+                      </label>
+
+                      <input
+                        type="text"
+                        name="last_name"
+                        value={
+                          form.last_name
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        required
+                        placeholder="Last name"
+                      />
+
+                    </div>
+
+                    <div className="form-group">
+
+                      <label>
+                        Date of Birth
+                      </label>
+
+                      <input
+                        type="date"
+                        name="date_of_birth"
+                        value={
+                          form.date_of_birth
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        required
+                      />
+
+                    </div>
+
+                    <div className="form-group">
+
+                      <label>
+                        Email
+                      </label>
+
+                      <input
+                        type="email"
+                        name="email"
+                        value={
+                          form.email
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        required
+                        placeholder="student@example.com"
+                      />
+
+                    </div>
+
+                    <div className="form-group">
+
+                      <label>
+                        Phone
+                      </label>
+
+                      <input
+                        type="text"
+                        name="phone"
+                        value={
+                          form.phone
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        placeholder="Phone number"
+                      />
+
+                    </div>
+
+                    <div className="form-group">
+
+                      <label>
+                        Password
+                      </label>
+
+                      <input
+                        type="password"
+                        name="password"
+                        value={
+                          form.password
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        required
+                        minLength="6"
+                        placeholder="Student login password"
+                      />
+
+                    </div>
+
+                    <div className="form-group form-group-full">
+
+                      <label>
+                        Address
+                      </label>
+
+                      <textarea
+                        name="address"
+                        value={
+                          form.address
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        rows="3"
+                        placeholder="Student address"
+                      />
+
+                    </div>
+
+                  </div>
+
+                  <div className="form-actions">
+
+                    <button
+                      type="submit"
+                      className="primary-button"
+                    >
+                      Register Student
+                    </button>
+
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={
+                        handleCancelForm
                       }
                     >
-                      <td>
-                        <div className="table-student">
-                          <div className="table-avatar">
-                            {getInitials(
-                              student.first_name,
-                              student.last_name
-                            )}
-                          </div>
+                      Cancel
+                    </button>
 
-                          <div>
-                            <strong>
-                              {
-                                student.first_name
-                              }{" "}
-                              {
-                                student.last_name
-                              }
-                            </strong>
+                  </div>
 
-                            <span>
-                              {
-                                student.student_number
-                              }
-                            </span>
-                          </div>
-                        </div>
-                      </td>
+                </form>
+              )}
 
-                      <td>
-                        <span
-                          className={`gender-badge ${
-                            student.gender?.toLowerCase() ===
-                            "female"
-                              ? "female"
-                              : "male"
-                          }`}
-                        >
-                          {student.gender ||
-                            "—"}
-                        </span>
-                      </td>
+              {!showStudentForm && (
+                <div className="empty-state">
 
-                      <td>
-                        {formatDate(
-                          student.date_of_birth
-                        )}
-                      </td>
+                  <p>
+                    Click below to
+                    register a new
+                    student.
+                  </p>
 
-                      <td>
-                        <div className="contact-cell">
-                          <span>
-                            {student.email ||
-                              "—"}
-                          </span>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={
+                      openRegisterForm
+                    }
+                  >
+                    + Register Student
+                  </button>
 
-                          <small>
-                            {student.phone ||
-                              "—"}
-                          </small>
-                        </div>
-                      </td>
+                </div>
+              )}
 
-                      <td>
-                        <div className="contact-cell">
-                          <span>
-                            {
-                              student.guardian_name
-                            ||
-                              "—"}
-                          </span>
-
-                          <small>
-                            {
-                              student.guardian_phone
-                            ||
-                              "—"}
-                          </small>
-                        </div>
-                      </td>
-
-                      <td>
-                        {formatDate(
-                          student.created_at
-                        )}
-                      </td>
-                    </tr>
-                  )
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {!loading &&
-          !error &&
-          students.length > 0 && (
-            <div className="table-footer">
-              <span>
-                Showing{" "}
-                <strong>
-                  {students.length}
-                </strong>{" "}
-                student
-                {students.length !==
-                1
-                  ? "s"
-                  : ""}
-              </span>
             </div>
-          )}
-      </div>
-    </>
-  );
-}
 
-/* =========================================================
-   REGISTER PAGE
-========================================================= */
-
-function RegisterPage({
-  form,
-  handleInputChange,
-  handleSubmit,
-  submitting,
-  success,
-  formError,
-}) {
-  const today = new Date()
-    .toISOString()
-    .split("T")[0];
-
-  return (
-    <>
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">
-            STUDENT MANAGEMENT
-          </p>
-
-          <h1>
-            Register Student
-          </h1>
-
-          <p className="heading-description">
-            Create a student account
-            and student record.
-          </p>
-        </div>
-      </div>
-
-      <div className="content-card registration-card">
-        {success && (
-          <div className="success-alert">
-            ✓ {success}
-          </div>
+          </section>
         )}
 
-        {formError && (
-          <div className="error-alert">
-            ! {formError}
-          </div>
-        )}
+        {/* =====================================================
+            EDIT STUDENT
+        ====================================================== */}
 
-        <form
-          onSubmit={handleSubmit}
-        >
-          {/* =================================================
-              ACCOUNT INFORMATION
-          ================================================= */}
+        {activePage === "edit" && (
+          <section className="page-content">
 
-          <FormSection
-            number="01"
-            title="Account Information"
-            description="These details create the student's login account."
-          >
-            <div className="form-grid">
-              <FormField
-                label="Account Name"
-                name="name"
-                value={form.name}
-                onChange={
-                  handleInputChange
-                }
-                required
-                placeholder="e.g. John Doe"
-              />
+            <div className="content-card">
 
-              <FormField
-                label="Email Address"
-                name="email"
-                type="email"
-                value={form.email}
-                onChange={
-                  handleInputChange
-                }
-                required
-                placeholder="student@example.com"
-              />
+              <div className="content-card-header">
 
-              <FormField
-                label="Password"
-                name="password"
-                type="password"
-                value={
-                  form.password
-                }
-                onChange={
-                  handleInputChange
-                }
-                required
-                placeholder="Minimum 6 characters"
-              />
-            </div>
-          </FormSection>
+                <div>
 
-          {/* =================================================
-              STUDENT INFORMATION
-          ================================================= */}
+                  <h2>
+                    Edit Student
+                  </h2>
 
-          <FormSection
-            number="02"
-            title="Student Information"
-            description="Basic information about the student."
-          >
-            <div className="form-grid">
-              <FormField
-                label="Student Number"
-                name="student_number"
-                value={
-                  form.student_number
-                }
-                onChange={
-                  handleInputChange
-                }
-                required
-                placeholder="e.g. STU004"
-              />
+                  <p>
+                    Update the student's
+                    information.
+                  </p>
 
-              <FormField
-                label="First Name"
-                name="first_name"
-                value={
-                  form.first_name
-                }
-                onChange={
-                  handleInputChange
-                }
-                required
-                placeholder="Enter first name"
-              />
+                </div>
 
-              <FormField
-                label="Last Name"
-                name="last_name"
-                value={
-                  form.last_name
-                }
-                onChange={
-                  handleInputChange
-                }
-                required
-                placeholder="Enter last name"
-              />
-
-              <div className="form-field">
-                <label htmlFor="gender">
-                  Gender{" "}
-                  <span>*</span>
-                </label>
-
-                <select
-                  id="gender"
-                  name="gender"
-                  value={
-                    form.gender
-                  }
-                  onChange={
-                    handleInputChange
-                  }
-                  required
-                >
-                  <option value="">
-                    Select gender
-                  </option>
-
-                  <option value="Male">
-                    Male
-                  </option>
-
-                  <option value="Female">
-                    Female
-                  </option>
-
-                  <option value="Other">
-                    Other
-                  </option>
-                </select>
               </div>
 
-              <FormField
-                label="Date of Birth"
-                name="date_of_birth"
-                type="date"
-                value={
-                  form.date_of_birth
-                }
-                onChange={
-                  handleInputChange
-                }
-                required
-                max={today}
-              />
-
-              <FormField
-                label="Phone Number"
-                name="phone"
-                type="tel"
-                value={form.phone}
-                onChange={
-                  handleInputChange
-                }
-                placeholder="0700000000"
-              />
-
-              <FormField
-                label="Address"
-                name="address"
-                value={
-                  form.address
-                }
-                onChange={
-                  handleInputChange
-                }
-                placeholder="Kampala, Uganda"
-              />
-            </div>
-          </FormSection>
-
-          {/* =================================================
-              GUARDIAN INFORMATION
-          ================================================= */}
-
-          <FormSection
-            number="03"
-            title="Guardian Information"
-            description="Parent or guardian contact information."
-          >
-            <div className="form-grid">
-              <FormField
-                label="Guardian Name"
-                name="guardian_name"
-                value={
-                  form.guardian_name
-                }
-                onChange={
-                  handleInputChange
-                }
-                placeholder="Enter guardian name"
-              />
-
-              <FormField
-                label="Guardian Phone"
-                name="guardian_phone"
-                type="tel"
-                value={
-                  form.guardian_phone
-                }
-                onChange={
-                  handleInputChange
-                }
-                placeholder="0700000000"
-              />
-            </div>
-          </FormSection>
-
-          {/* =================================================
-              SUBMIT
-          ================================================= */}
-
-          <div className="form-actions">
-            <button
-              type="submit"
-              className="primary-button register-submit"
-              disabled={
-                submitting
-              }
-            >
-              {submitting ? (
-                <>
-                  <span className="spinner" />
-                  Registering...
-                </>
-              ) : (
-                <>
-                  ✓ Register Student
-                </>
+              {formError && (
+                <div className="alert alert-error">
+                  {formError}
+                </div>
               )}
-            </button>
-          </div>
-        </form>
-      </div>
-    </>
-  );
-}
 
-/* =========================================================
-   FORM SECTION
-========================================================= */
+              {showStudentForm && (
+                <form
+                  className="student-form"
+                  onSubmit={
+                    handleUpdateStudent
+                  }
+                >
 
-function FormSection({
-  number,
-  title,
-  description,
-  children,
-}) {
-  return (
-    <section className="form-section">
-      <div className="form-section-heading">
-        <div className="section-number">
-          {number}
-        </div>
+                  <div className="form-grid">
 
-        <div>
-          <h2>
-            {title}
-          </h2>
+                    <div className="form-group">
 
-          <p>
-            {description}
-          </p>
-        </div>
-      </div>
+                      <label>
+                        Student Number
+                      </label>
 
-      {children}
-    </section>
-  );
-}
+                      <input
+                        type="text"
+                        name="student_number"
+                        value={
+                          form.student_number
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        required
+                      />
 
-/* =========================================================
-   FORM FIELD
-========================================================= */
+                    </div>
 
-function FormField({
-  label,
-  name,
-  value,
-  onChange,
-  type = "text",
-  required = false,
-  placeholder = "",
-  max,
-}) {
-  return (
-    <div className="form-field">
-      <label htmlFor={name}>
-        {label}{" "}
-        {required && (
-          <span>*</span>
+                    <div className="form-group">
+
+                      <label>
+                        Gender
+                      </label>
+
+                      <select
+                        name="gender"
+                        value={
+                          form.gender
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        required
+                      >
+
+                        <option value="">
+                          Select gender
+                        </option>
+
+                        <option value="Male">
+                          Male
+                        </option>
+
+                        <option value="Female">
+                          Female
+                        </option>
+
+                      </select>
+
+                    </div>
+
+                    <div className="form-group">
+
+                      <label>
+                        First Name
+                      </label>
+
+                      <input
+                        type="text"
+                        name="first_name"
+                        value={
+                          form.first_name
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        required
+                      />
+
+                    </div>
+
+                    <div className="form-group">
+
+                      <label>
+                        Last Name
+                      </label>
+
+                      <input
+                        type="text"
+                        name="last_name"
+                        value={
+                          form.last_name
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        required
+                      />
+
+                    </div>
+
+                    <div className="form-group">
+
+                      <label>
+                        Date of Birth
+                      </label>
+
+                      <input
+                        type="date"
+                        name="date_of_birth"
+                        value={
+                          form.date_of_birth
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        required
+                      />
+
+                    </div>
+
+                    <div className="form-group">
+
+                      <label>
+                        Email
+                      </label>
+
+                      <input
+                        type="email"
+                        name="email"
+                        value={
+                          form.email
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        required
+                      />
+
+                    </div>
+
+                    <div className="form-group">
+
+                      <label>
+                        Phone
+                      </label>
+
+                      <input
+                        type="text"
+                        name="phone"
+                        value={
+                          form.phone
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                      />
+
+                    </div>
+
+                    <div className="form-group">
+
+                      <label>
+                        New Password
+                      </label>
+
+                      <input
+                        type="password"
+                        name="password"
+                        value={
+                          form.password
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        minLength="6"
+                        placeholder="Leave blank to keep current password"
+                      />
+
+                    </div>
+
+                    <div className="form-group form-group-full">
+
+                      <label>
+                        Address
+                      </label>
+
+                      <textarea
+                        name="address"
+                        value={
+                          form.address
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        rows="3"
+                      />
+
+                    </div>
+
+                    <div className="form-group">
+
+                      <label>
+                        Guardian Name
+                      </label>
+
+                      <input
+                        type="text"
+                        name="guardian_name"
+                        value={
+                          form.guardian_name
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                      />
+
+                    </div>
+
+                    <div className="form-group">
+
+                      <label>
+                        Guardian Phone
+                      </label>
+
+                      <input
+                        type="text"
+                        name="guardian_phone"
+                        value={
+                          form.guardian_phone
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                      />
+
+                    </div>
+
+                  </div>
+
+                  <div className="form-actions">
+
+                    <button
+                      type="submit"
+                      className="primary-button"
+                    >
+                      Update Student
+                    </button>
+
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={
+                        handleCancelForm
+                      }
+                    >
+                      Cancel
+                    </button>
+
+                  </div>
+
+                </form>
+              )}
+
+            </div>
+
+          </section>
         )}
-      </label>
 
-      <input
-        id={name}
-        type={type}
-        name={name}
-        value={value}
-        onChange={onChange}
-        placeholder={
-          placeholder
-        }
-        required={required}
-        max={max}
-      />
-    </div>
-  );
-}
+        {/* =====================================================
+            TEACHERS
+        ====================================================== */}
 
-/* =========================================================
-   LOADING
-========================================================= */
+        {activePage ===
+          "teachers" && (
+          <section className="page-content">
 
-function Loading() {
-  return (
-    <div className="loading-state">
-      <div className="large-spinner" />
+            <TeacherManagement
+              auth={auth}
+            />
 
-      <p>
-        Loading student
-        records...
-      </p>
-    </div>
-  );
-}
+          </section>
+        )}
 
-/* =========================================================
-   ERROR
-========================================================= */
+        {/* =====================================================
+            TEACHER ASSIGNMENTS
+        ====================================================== */}
 
-function ErrorBox({
-  message,
-}) {
-  return (
-    <div className="error-state">
-      <div className="error-icon">
-        !
-      </div>
+        {activePage ===
+          "assignments" && (
+          <section className="page-content">
 
-      <div>
-        <strong>
-          Something went wrong
-        </strong>
+            <TeacherAssignmentManagement
+              auth={auth}
+            />
 
-        <p>
-          {message}
-        </p>
-      </div>
-    </div>
-  );
-}
+          </section>
+        )}
 
-/* =========================================================
-   EMPTY STATE
-========================================================= */
+        {/* =====================================================
+            CLASSES
+        ====================================================== */}
 
-function EmptyState({
-  search,
-}) {
-  return (
-    <div className="empty-state">
-      <div className="empty-icon">
-        ♙
-      </div>
+        {activePage ===
+          "classes" && (
+          <section className="page-content">
 
-      <h3>
-        No students found
-      </h3>
+            <ClassManagement
+              auth={auth}
+            />
 
-      <p>
-        {search
-          ? "Try changing your search term."
-          : "There are no registered students yet."}
-      </p>
+          </section>
+        )}
+
+        {/* =====================================================
+            COURSE UNITS
+        ====================================================== */}
+
+        {activePage ===
+          "subjects" && (
+          <section className="page-content">
+
+            <SubjectManagement
+              auth={auth}
+            />
+
+          </section>
+        )}
+
+        {/* =====================================================
+            ACADEMIC YEARS
+        ====================================================== */}
+
+        {activePage ===
+          "academic-years" && (
+          <section className="page-content">
+
+            <AcademicYearManagement
+              auth={auth}
+            />
+
+          </section>
+        )}
+
+        {/* =====================================================
+            STUDENT ENROLLMENT
+        ====================================================== */}
+
+        {activePage ===
+          "enrollment" && (
+          <section className="page-content">
+
+            <EnrollmentManagement
+              auth={auth}
+            />
+
+          </section>
+        )}
+
+        {/* =====================================================
+            ACTIVITY LOGS
+        ====================================================== */}
+
+        {activePage === "activity-logs" &&
+          auth?.user?.role === "admin" && (
+          <section className="page-content">
+
+            <ActivityLogManagement
+              auth={auth}
+            />
+
+          </section>
+        )}
+
+      </main>
+
     </div>
   );
 }

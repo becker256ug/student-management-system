@@ -132,12 +132,13 @@ const createTimetable = async (req, res) => {
 
 const getTimetables = async (req, res) => {
   try {
-    const [timetables] = await db.execute(
-      `SELECT
+    let query = `
+      SELECT
         t.id,
         t.class_subject_id,
         cs.class_id,
         c.name AS class_name,
+        c.code AS class_code,
         cs.subject_id,
         s.name AS subject_name,
         s.code AS subject_code,
@@ -158,10 +159,35 @@ const getTimetables = async (req, res) => {
         ON cs.subject_id = s.id
       INNER JOIN semesters sem
         ON t.semester_id = sem.id
+    `;
+
+    const params = [];
+
+    // Teachers can only see timetables
+    // for classes and subjects assigned to them.
+    if (req.user.role === "teacher") {
+      query += `
+        WHERE EXISTS (
+          SELECT 1
+          FROM teacher_assignments ta
+          INNER JOIN teachers tr
+            ON ta.teacher_id = tr.id
+          WHERE ta.class_subject_id = t.class_subject_id
+            AND ta.semester_id = t.semester_id
+            AND tr.user_id = ?
+        )
+      `;
+
+      params.push(req.user.id);
+    }
+
+    query += `
       ORDER BY
         t.day_of_week,
-        t.start_time`
-    );
+        t.start_time
+    `;
+
+    const [timetables] = await db.execute(query, params);
 
     return res.json(timetables);
   } catch (error) {
