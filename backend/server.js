@@ -5,6 +5,7 @@ const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 
 const { connectRedis } = require("./config/redis");
+const db = require("./config/db");
 
 const authRoutes = require("./routes/authRoutes");
 const studentRoutes = require("./routes/studentRoutes");
@@ -130,7 +131,9 @@ app.use("/api/student-fees", studentFeeRoutes);
 app.use("/api/payments", paymentRoutes);
 
 app.use("/api/timetables", timetableRoutes);
+
 app.use("/api/activity-logs", activityLogRoutes);
+
 app.use("/api/student-portal", studentPortalRoutes);
 
 /*
@@ -151,6 +154,37 @@ app.get("/api/health", (req, res) => {
     message: "StudentHub API is healthy",
     status: "OK",
   });
+});
+
+/*
+ * ---------------------------------------------------------
+ * DATABASE CONNECTION TEST
+ * ---------------------------------------------------------
+ *
+ * This endpoint performs a real query against MySQL.
+ *
+ * It is useful for verifying the Render -> Aiven
+ * MySQL connection.
+ */
+
+app.get("/api/db-test", async (req, res) => {
+  try {
+    const [rows] = await db.query("SELECT 1 AS db_test");
+
+    res.json({
+      message: "Database connection successful",
+      status: "OK",
+      database: rows[0].db_test === 1,
+    });
+  } catch (error) {
+    console.error("Database test failed:", error.message);
+
+    res.status(500).json({
+      message: "Database connection failed",
+      status: "ERROR",
+      error: error.message,
+    });
+  }
 });
 
 /*
@@ -189,6 +223,9 @@ const startServer = async () => {
   try {
     /*
      * Connect to Redis before starting the server.
+     *
+     * Redis is optional. If REDIS_URL is not configured,
+     * connectRedis() will simply continue.
      */
     await connectRedis();
 
