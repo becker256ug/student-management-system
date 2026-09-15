@@ -12,7 +12,9 @@ import SubjectManagement from "./components/SubjectManagement";
 import AcademicYearManagement from "./components/AcademicYearManagement";
 import ActivityLogManagement from "./components/ActivityLogManagement";
 
-const API_URL = "http://localhost:5000/api/students";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+const API_URL = `${API_BASE}/students`;
 
 const emptyForm = {
   student_number: "",
@@ -175,7 +177,7 @@ function App() {
 
     try {
       const response = await fetch(
-        "http://localhost:5000/api/teachers",
+        `${API_BASE}/teachers`,
         {
           headers: {
             Authorization: `Bearer ${auth.token}`,

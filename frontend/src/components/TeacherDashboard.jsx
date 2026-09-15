@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import TeacherAttendance from "./TeacherAttendance";
 import TeacherResults from "./TeacherResults";
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 function TeacherDashboard({ auth, onLogout }) {
   const [assignments, setAssignments] = useState([]);
@@ -1071,3 +1071,4 @@ const teacherStyles = `
 `;
 
 export default TeacherDashboard;
+

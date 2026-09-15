@@ -15,7 +15,7 @@ function StudentList() {
       setLoading(true);
       setError("");
 
-      const response = await fetch("http://localhost:5000/api/students");
+      const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:5000/api"}/students`);
 
       if (!response.ok) {
         throw new Error("Failed to fetch students");

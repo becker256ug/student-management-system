@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const API_URL = "http://localhost:5000/api/academic-years";
+const API_URL = `${import.meta.env.VITE_API_URL || "http://localhost:5000/api"}/academic-years`;
 
 function AcademicYearManagement({ auth }) {
   const [academicYears, setAcademicYears] = useState([]);
